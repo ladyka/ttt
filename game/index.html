@@ -756,7 +756,7 @@ class GameScene extends Phaser.Scene {
     // Камеры
     const main = this.cameras.main;
     main.setBounds(0, 0, WORLD.w, WORLD.h);
-    main.startFollow(this.hero, true, 0.08, 0.08);
+    // без startFollow: scroll выставляем вручную в update — герой всегда ровно в центре
     this.mm = this.cameras.add(0, 0, 240, 180);
     this.mm.setBounds(0, 0, WORLD.w, WORLD.h);
     this.mm.setBackgroundColor(0x14141a, 0.92);
@@ -802,6 +802,13 @@ class GameScene extends Phaser.Scene {
     this.hero.setVelocity(vx * player.speed, vy * player.speed);
 
     this.nameText.setPosition(this.hero.x, this.hero.y - player.s / 2 - 8).setText(heroName);
+
+    // Основная камера: герой ровно в центре экрана
+    const cw = this.scale.gameSize.width, ch = this.scale.gameSize.height;
+    this.cameras.main.setScroll(
+      Phaser.Math.Clamp(this.hero.x - cw / 2, 0, Math.max(0, WORLD.w - cw)),
+      Phaser.Math.Clamp(this.hero.y - ch / 2, 0, Math.max(0, WORLD.h - ch))
+    );
 
     // Меню внутри здания
     const b = buildingAt();
