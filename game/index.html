@@ -547,8 +547,6 @@ if (sv0 && sv0.name) {
   continueRow.classList.remove('hidden');
   newRow.classList.add('hidden');
 }
-if (location.hash === '#autostart') startBtn.click();
-
 function gameOver(title, text) {
   if (dead) return;
   dead = true;
@@ -841,6 +839,9 @@ class GameScene extends Phaser.Scene {
     if (Math.random() < 0.02) save();
   }
 }
+
+// Автостарт для отладки — после объявления класса GameScene
+if (location.hash === '#autostart') startBtn.click();
 </script>
 </body>
 </html>
