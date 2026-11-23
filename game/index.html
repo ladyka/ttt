@@ -147,7 +147,7 @@ window.addEventListener('error', e => {
   const t = document.getElementById('toasts');
   if (t) showMsg('Ошибка: ' + (e.message || e.type));
 });
-const SAVE_KEY = 'ttt-save-v1';
+const SAVE_KEY = 'ttt-save-v2'; // v2: Phaser-версия, старые сохранения vanilla не читаем
 const nameScreen = document.getElementById('screen-name');
 const gameScreen = document.getElementById('screen-game');
 const toasts = document.getElementById('toasts');
