@@ -4,12 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ТТТ: Тунеядзец тутэйшы торгаш</title>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
 <style>
   body { background: #1b1b1f; color: #eee; font-family: sans-serif; text-align: center; margin: 0; overflow: hidden; }
-  canvas { background: #2b2b33; border: 2px solid #555; display: block; margin: 8px auto 0; }
-  #hud { display: flex; gap: 14px; justify-content: center; font-size: 15px; margin-top: 10px; flex-wrap: wrap; }
-  #hud .stat { background: #26262e; padding: 5px 10px; border-radius: 6px; border: 1px solid #444; min-width: 140px; }
+  #screen-game { position: fixed; inset: 0; }
+  #game-container { position: absolute; inset: 0; z-index: 1; }
+  #game-container canvas { margin: 0; border: none; display: block; }
+  #hud { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; justify-content: center; font-size: 15px; flex-wrap: wrap; z-index: 5; max-width: 96vw; }
+  #hud .stat { background: rgba(38,38,46,.9); padding: 5px 10px; border-radius: 6px; border: 1px solid #444; min-width: 140px; }
   #hud .stat b { color: #ffd24a; font-variant-numeric: tabular-nums; display: inline-block; min-width: 4ch; text-align: right; }
+  #mission-bar { position: absolute; top: 46px; left: 0; width: 100%; text-align: center; font-size: 15px; color: #7fdb8a; min-height: 20px; z-index: 5; pointer-events: none; }
+  #hint { position: absolute; bottom: 6px; left: 0; width: 100%; font-size: 13px; color: #999; z-index: 5; margin: 0; pointer-events: none; }
   #toasts { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 15; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; max-width: 90vw; }
   .toast { pointer-events: auto; background: rgba(38,38,46,.95); border: 1px solid #ffd24a; color: #ffd24a; padding: 10px 16px; border-radius: 8px; font-size: 16px; animation: tfade .2s; transition: opacity .3s; }
   .toast .x { cursor: pointer; margin-left: 12px; color: #999; font-weight: bold; }
@@ -28,38 +33,33 @@
   #bmenu-close { color: #aaa; }
   /* Мобильный экран */
   @media (max-width: 700px) {
-    #hud { font-size: 12px; gap: 6px; }
+    #hud { font-size: 12px; gap: 6px; top: 4px; }
     #hud .stat { min-width: 0; padding: 3px 6px; }
     #hud .stat b { min-width: 3ch; }
-    #minimap { width: 140px; height: 105px; right: 8px; bottom: 8px; }
+    #mission-bar { top: 78px; font-size: 13px; }
     #toasts { top: 110px; }
     .toast { font-size: 14px; padding: 8px 12px; }
     #screen-name input { width: 200px; font-size: 18px; }
     #screen-name button { font-size: 18px; }
   }
-  #mission-bar { font-size: 15px; color: #7fdb8a; min-height: 20px; margin-top: 4px; }
   #screen-name { padding-top: 70px; }
   #screen-name input { font-size: 22px; padding: 8px 12px; width: 260px; text-align: center; }
   #screen-name button { font-size: 22px; padding: 8px 20px; margin-left: 8px; cursor: pointer; }
   #btn-reset { font-size: 14px; padding: 4px 10px; margin-top: 20px; background: #442; color: #faa; border: 1px solid #a66; }
-  .hidden { display: none; }
+  .hidden { display: none !important; }
   /* Газета-оверлей */
   #paper { position: fixed; inset: 0; background: rgba(0,0,0,.7); align-items: center; justify-content: center; z-index: 10; }
   #paper:not(.hidden) { display: flex; }
-  #paper.hidden { display: none; }
   #gameover { position: fixed; inset: 0; background: rgba(40,0,0,.92); display: flex; align-items: center; justify-content: center; z-index: 20; }
-  #gameover.hidden { display: none; }
   #gameover-inner { text-align: center; color: #ffb3b3; }
   #gameover-inner h1 { font-size: 42px; margin-bottom: 10px; }
   #gameover-inner p { font-size: 20px; }
   #gameover-inner button { font-size: 20px; padding: 10px 24px; margin-top: 18px; cursor: pointer; }
   #dayover { position: fixed; inset: 0; background: rgba(0,10,40,.92); display: flex; align-items: center; justify-content: center; z-index: 20; }
-  #dayover.hidden { display: none; }
   #dayover-inner { text-align: center; color: #bcd2ff; }
   #dayover-inner h1 { font-size: 42px; margin-bottom: 10px; }
   #dayover-inner p { font-size: 20px; }
   #dayover-inner button { font-size: 20px; padding: 10px 24px; margin: 18px 6px 0; cursor: pointer; }
-  #minimap { position: fixed; right: 12px; bottom: 12px; background: rgba(20,20,26,.85); border: 2px solid #555; border-radius: 6px; z-index: 5; }
   #paper-inner { background: #e8e0c8; color: #222; width: 520px; max-width: 90vw; padding: 24px 28px; border-radius: 4px; text-align: left; box-shadow: 0 8px 40px #000; }
   #paper-inner h2 { margin: 0 0 4px; text-align: center; }
   #paper-inner .sub { text-align: center; color: #666; font-size: 13px; margin-bottom: 14px; }
@@ -90,6 +90,7 @@
 </div>
 
 <div id="screen-game" class="hidden">
+  <div id="game-container"></div>
   <div id="hud">
     <span class="stat">Имя: <b id="st-name"></b></span>
     <span class="stat">Деньги: <b id="st-money">10</b> BYN</span>
@@ -101,14 +102,12 @@
   </div>
   <div id="mission-bar"></div>
   <div id="toasts"></div>
-  <canvas id="c" width="640" height="400"></canvas>
-  <canvas id="minimap" width="240" height="180"></canvas>
   <div id="touch">
     <div class="trow"><button data-k="arrowup">▲</button></div>
     <div class="trow"><button data-k="arrowleft">◀</button><button data-k="arrowdown">▼</button><button data-k="arrowright">▶</button></div>
     <div class="trow"><button data-act="e">E</button><button data-act="n">N</button></div>
   </div>
-  <p>WASD/стрелки — идти. E — рядом: киоск (еда 10), туалет, общежитие (сон за 30), газета (взять). N — вакансии, если газета есть.</p>
+  <p id="hint">WASD/стрелки — идти. E — рядом: киоск (еда 10), туалет, общежитие (сон за 30), газета (взять). N — вакансии, если газета есть.</p>
 </div>
 
 <div id="dayover" class="hidden">
@@ -172,8 +171,11 @@ const resetBtn = document.getElementById('btn-reset');
 const paper = document.getElementById('paper');
 const jobsEl = document.getElementById('jobs');
 const paperClose = document.getElementById('paper-close');
+const bmenu = document.getElementById('bmenu');
 
 let heroName = '';
+let game = null;      // Phaser.Game
+let sceneRef = null;  // GameScene
 
 // --- Состояние игры ---
 const state = {
@@ -201,20 +203,15 @@ const JOBS = [
   { id: 'rynok',      title: 'Рынок',           n: 2, from: ['market'],    to: ['house'],                 pay: 20, desc: 'Купи товар на Комаровке и продай в доме дороже. +20 BYN.' }
 ];
 let mission = null; // { jobId, pay, points: [{x,y}], idx }
-let hasPaper = false; // подобрал ли игрок газету
+let hasPaper = false;
 let dead = false;
 let day = 1;
 
-// --- Мир и камера ---
+// --- Мир ---
 const WORLD = { w: 16000, h: 12000 };
-const c = document.getElementById('c'), x = c.getContext('2d');
-const mm = document.getElementById('minimap'), mx = mm.getContext('2d');
-const player = { x: 8000, y: 9000, s: 48, speed: 10 };
-const cam = { x: 0, y: 0 };
-const keys = {};
+const player = { x: 8000, y: 9000, s: 48, speed: 600 }; // speed в px/сек
+const touchKeys = {};
 
-// Стены зданий с вырезанной дверью со стороны ближайшей дороги.
-// Проходимые зоны: вокзал, парк, парковка, остановки, контейнеры.
 const DOOR_W = 120, DOOR_H = 90;
 const PASSABLE = ['station', 'park', 'parking', 'busstop', 'glassbin'];
 function doorSide(b) {
@@ -259,15 +256,6 @@ function wallRects(b) {
     { x: b.x + b.w - DOOR_H, y: dy + DOOR_W, w: DOOR_H, h: Math.max(0, b.y + b.h - dy - DOOR_W) }
   ];
 }
-function drawDoor(p) {
-  const s = doorSide(p);
-  const cx = p.x + p.w / 2, cy = p.y + p.h / 2;
-  x.fillStyle = '#1b1b1f';
-  if (s === 's') x.fillRect(cx - DOOR_W / 2, p.y + p.h - DOOR_H, DOOR_W, DOOR_H);
-  else if (s === 'n') x.fillRect(cx - DOOR_W / 2, p.y, DOOR_W, DOOR_H);
-  else if (s === 'w') x.fillRect(p.x, cy - DOOR_W / 2, DOOR_H, DOOR_W);
-  else x.fillRect(p.x + p.w - DOOR_H, cy - DOOR_W / 2, DOOR_H, DOOR_W);
-}
 function solids() {
   const out = [];
   POIS.forEach(p => {
@@ -279,89 +267,54 @@ function solids() {
   out.push(KIOSK); // в киоск входа нет — сплошной, еда снаружи по E
   return out;
 }
-function collides(nx, ny) {
-  return solids().some(b => nx < b.x + b.w && nx + player.s > b.x && ny < b.y + b.h && ny + player.s > b.y);
-}
 
-// Canvas на всю ширину/высоту окна минус HUD сверху
-function resizeCanvas() {
-  c.width = window.innerWidth;
-  c.height = window.innerHeight - c.offsetTop - 10;
-  if (c.height < 100) c.height = 100;
-}
-window.addEventListener('resize', resizeCanvas);
-addEventListener('keydown', e => {
-  keys[e.key.toLowerCase()] = true;
-  if (e.code === 'KeyE') interact();
-  if (e.code === 'KeyN') togglePaperAnywhere();
-});
-addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
-
-// Сенсорные кнопки
-document.querySelectorAll('#touch button').forEach(b => {
-  const k = b.dataset.k, act = b.dataset.act;
-  const on = e => { e.preventDefault(); if (k) keys[k] = true; if (act === 'e') interact(); if (act === 'n') togglePaperAnywhere(); };
-  const off = e => { e.preventDefault(); if (k) keys[k] = false; };
-  b.addEventListener('touchstart', on);
-  b.addEventListener('touchend', off);
-  b.addEventListener('touchcancel', off);
-  b.addEventListener('mousedown', on);
-  b.addEventListener('mouseup', off);
-  b.addEventListener('mouseleave', off);
-});
-
-const PAPER_SPOT = { x: 6430, y: 10060, r: 450 }; // центр газеты
-const KIOSK_SPOT = { x: 5200, y: 8800, r: 500 }; // центр киоска
+const PAPER_SPOT = { x: 6430, y: 10060, r: 450 };
+const KIOSK_SPOT = { x: 5200, y: 8800, r: 500 };
 const FOOD_PRICE = 10;
-// Ключевые объекты мира (мир 16000x12000)
-const STATION = { x: 6000, y: 7000, w: 4000, h: 3500 }; // площадка вокзала
-const KIOSK = { x: 4800, y: 8500, w: 800, h: 600 };     // киоск
-const TOILET = { x: 6100, y: 7300, w: 300, h: 250 };    // туалет на вокзале
-const HOSTEL = { x: 4500, y: 10500, w: 900, h: 700 };  // общежитие (жильё за 30)
+const STATION = { x: 6000, y: 7000, w: 4000, h: 3500 };
+const KIOSK = { x: 4800, y: 8500, w: 800, h: 600 };
+const TOILET = { x: 6100, y: 7300, w: 300, h: 250 };
+const HOSTEL = { x: 4500, y: 10500, w: 900, h: 700 };
 const TOILET_SPOT = { x: 6250, y: 7425, r: 450 };
 const HOSTEL_SPOT = { x: 4950, y: 10850, r: 500 };
 const ROOM_PRICE = 30;
 
-// Дороги сеткой: горизонтали и вертикали
 const ROADS_H = [4500, 8800, 11000];
 const ROADS_V = [4500, 8000, 12000];
 const ROAD_W = 300;
 
-// POI — точки интереса. Миссии привязаны к ним по type.
-// draw:false — объект уже рисуется вручную (вокзал, киоск и т.д.)
 const POIS = [
-  { type: 'station',   x: STATION.x, y: STATION.y, w: STATION.w, h: STATION.h, label: 'ВОКЗАЛ',      color: '#4a4a55', draw: false },
-  { type: 'taxi_park', x: 11000, y: 9800, w: 1500, h: 900, label: 'ТАКСОПАРК',    color: '#8a6d2e' },
-  { type: 'glass',     x: 13000, y: 5000, w: 1200, h: 800, label: 'СТЕКЛОТАРА',   color: '#4a8a5a' },
-  { type: 'park',      x: 2000,  y: 2000, w: 3000, h: 2500, label: 'ПАРК',        color: '#2e6b2e' },
-  { type: 'parking',   x: 12000, y: 10500, w: 2500, h: 1200, label: 'ПАРКОВКА',  color: '#555560' },
-  { type: 'busstop',   x: 10200, y: 9200, w: 300, h: 300, label: 'ОСТАНОВКА',    color: '#7a4a8a' },
-  { type: 'busstop',   x: 15000, y: 9200, w: 300, h: 300, label: 'КОНЕЧНАЯ',     color: '#7a4a8a' },
-  { type: 'house',     x: 3000,  y: 5200, w: 700, h: 500, label: 'ДОМ',          color: '#6b5a4a' },
-  { type: 'house',     x: 3600,  y: 6400, w: 700, h: 500, label: 'ДОМ',          color: '#6b5a4a' },
-  { type: 'house',     x: 7200,  y: 2200, w: 700, h: 500, label: 'ДОМ',          color: '#5a6b4a' },
-  { type: 'house',     x: 9000,  y: 11400, w: 700, h: 500, label: 'ДОМ',        color: '#6b5a4a' },
-  { type: 'house',     x: 13200, y: 2500, w: 700, h: 500, label: 'ДОМ',          color: '#5a4a6b' },
-  { type: 'cafe',      x: 5500,  y: 5800, w: 800, h: 600, label: 'КАФЕ',          color: '#8a4a3a' },
-  { type: 'sklad',     x: 7500,  y: 10900, w: 1000, h: 700, label: 'СКЛАД',       color: '#666670' },
-  { type: 'hozmag',    x: 12500, y: 6500, w: 1000, h: 700, label: 'ХОЗМАГ',       color: '#4a6b8a' },
-  { type: 'glassbin',  x: 4000,  y: 4000, w: 300, h: 300, label: 'БУТЫЛКИ',      color: '#4a8a6b' },
-  { type: 'glassbin',  x: 14000, y: 6200, w: 300, h: 300, label: 'БУТЫЛКИ',      color: '#4a8a6b' },
-  { type: 'glassbin',  x: 9000,  y: 3200, w: 300, h: 300, label: 'БУТЫЛКИ',      color: '#4a8a6b' },
-  { type: 'toilet',    x: 2200,  y: 2400, w: 300, h: 250, label: 'WC',           color: '#cfd6dd' }, // туалет в парке
-  { type: 'market',    x: 14500, y: 2000, w: 1400, h: 1000, label: 'РЫНОК КАМАРОЎКА', color: '#7a5a2e' }
+  { type: 'station',   x: STATION.x, y: STATION.y, w: STATION.w, h: STATION.h, label: 'ВОКЗАЛ',      color: 0x4a4a55, css: '#4a4a55', draw: false },
+  { type: 'taxi_park', x: 11000, y: 9800, w: 1500, h: 900, label: 'ТАКСОПАРК',    color: 0x8a6d2e, css: '#8a6d2e' },
+  { type: 'glass',     x: 13000, y: 5000, w: 1200, h: 800, label: 'СТЕКЛОТАРА',   color: 0x4a8a5a, css: '#4a8a5a' },
+  { type: 'park',      x: 2000,  y: 2000, w: 3000, h: 2500, label: 'ПАРК',        color: 0x2e6b2e, css: '#2e6b2e' },
+  { type: 'parking',   x: 12000, y: 10500, w: 2500, h: 1200, label: 'ПАРКОВКА',  color: 0x555560, css: '#555560' },
+  { type: 'busstop',   x: 10200, y: 9200, w: 300, h: 300, label: 'ОСТАНОВКА',    color: 0x7a4a8a, css: '#7a4a8a' },
+  { type: 'busstop',   x: 15000, y: 9200, w: 300, h: 300, label: 'КОНЕЧНАЯ',     color: 0x7a4a8a, css: '#7a4a8a' },
+  { type: 'house',     x: 3000,  y: 5200, w: 700, h: 500, label: 'ДОМ',          color: 0x6b5a4a, css: '#6b5a4a' },
+  { type: 'house',     x: 3600,  y: 6400, w: 700, h: 500, label: 'ДОМ',          color: 0x6b5a4a, css: '#6b5a4a' },
+  { type: 'house',     x: 7200,  y: 2200, w: 700, h: 500, label: 'ДОМ',          color: 0x5a6b4a, css: '#5a6b4a' },
+  { type: 'house',     x: 9000,  y: 11400, w: 700, h: 500, label: 'ДОМ',        color: 0x6b5a4a, css: '#6b5a4a' },
+  { type: 'house',     x: 13200, y: 2500, w: 700, h: 500, label: 'ДОМ',          color: 0x5a4a6b, css: '#5a4a6b' },
+  { type: 'cafe',      x: 5500,  y: 5800, w: 800, h: 600, label: 'КАФЕ',          color: 0x8a4a3a, css: '#8a4a3a' },
+  { type: 'sklad',     x: 7500,  y: 10900, w: 1000, h: 700, label: 'СКЛАД',       color: 0x666670, css: '#666670' },
+  { type: 'hozmag',    x: 12500, y: 6500, w: 1000, h: 700, label: 'ХОЗМАГ',       color: 0x4a6b8a, css: '#4a6b8a' },
+  { type: 'glassbin',  x: 4000,  y: 4000, w: 300, h: 300, label: 'БУТЫЛКИ',      color: 0x4a8a6b, css: '#4a8a6b' },
+  { type: 'glassbin',  x: 14000, y: 6200, w: 300, h: 300, label: 'БУТЫЛКИ',      color: 0x4a8a6b, css: '#4a8a6b' },
+  { type: 'glassbin',  x: 9000,  y: 3200, w: 300, h: 300, label: 'БУТЫЛКИ',      color: 0x4a8a6b, css: '#4a8a6b' },
+  { type: 'toilet',    x: 2200,  y: 2400, w: 300, h: 250, label: 'WC',           color: 0xcfd6dd, css: '#cfd6dd' },
+  { type: 'market',    x: 14500, y: 2000, w: 1400, h: 1000, label: 'РЫНОК КАМАРОЎКА', color: 0x7a5a2e, css: '#7a5a2e' }
 ];
-const TOILETS = [TOILET, POIS.find(p => p.type === 'toilet' && p.label === 'WC' && p.x === 2200)];
+const TOILETS = [TOILET, POIS.find(p => p.type === 'toilet' && p.x === 2200)];
 
 function near(a) {
-  const dx = player.x + player.s / 2 - a.x, dy = player.y + player.s / 2 - a.y;
-  return Math.hypot(dx, dy) < a.r;
+  const cx = player.x + player.s / 2, cy = player.y + player.s / 2;
+  return Math.hypot(cx - a.x, cy - a.y) < a.r;
 }
 function nearPaper() { return near(PAPER_SPOT); }
 function nearKiosk() { return near(KIOSK_SPOT); }
-function nearToilet() {
-  return TOILETS.some(t => near({ x: t.x + t.w / 2, y: t.y + t.h / 2, r: 450 }));
-}
+function nearToilet() { return TOILETS.some(t => near({ x: t.x + t.w / 2, y: t.y + t.h / 2, r: 450 })); }
+function nearHostel() { return near(HOSTEL_SPOT); }
 
 // --- Меню внутри здания ---
 let currentBuilding = null;
@@ -408,31 +361,38 @@ function openBuildingMenu(b) {
     btn.addEventListener('click', a.fn);
     box.appendChild(btn);
   });
-  document.getElementById('bmenu').classList.remove('hidden');
+  bmenu.classList.remove('hidden');
 }
 function closeBuildingMenu() {
-  document.getElementById('bmenu').classList.add('hidden');
+  bmenu.classList.add('hidden');
   currentBuilding = null;
 }
 document.getElementById('bmenu-close').addEventListener('click', closeBuildingMenu);
-function nearHostel() { return near(HOSTEL_SPOT); }
 
 function useToilet() {
   state.toilet = 0;
   showMsg('Сходил в туалет. Шкала обнулена.');
-  updateHud();
-  save();
+  updateHud(); save();
 }
-
 function rentRoom() {
   if (state.money >= ROOM_PRICE) {
     state.money -= ROOM_PRICE;
-    state.sleep = 100; // снял комнату — сон восстановлен (8 часов сна)
+    state.sleep = 100;
     showMsg('Снял комнату за ' + ROOM_PRICE + ' BYN. Сон 100%. Осталось: ' + state.money + ' BYN.');
-    updateHud();
-    save();
+    updateHud(); save();
   } else {
     showMsg('Не хватает на комнату (' + ROOM_PRICE + ' BYN). Сон падает…');
+  }
+}
+function buyFood() {
+  if (state.money >= FOOD_PRICE) {
+    state.money -= FOOD_PRICE;
+    state.hunger = 100;
+    state.health = Math.min(100, state.health + 5);
+    showMsg('Купил еду за ' + FOOD_PRICE + ' BYN. Голод восполнен, +5% здоровья. Осталось: ' + state.money + ' BYN.');
+    updateHud(); save();
+  } else {
+    showMsg('Не хватает денег на еду (' + FOOD_PRICE + ' BYN). Нужно заработать.');
   }
 }
 
@@ -442,15 +402,14 @@ function togglePaperAnywhere() {
   if (!hasPaper) { showMsg('У тебя нет газеты. Найди её на автовокзале.'); return; }
   openPaper();
 }
-
 function interact() {
   if (gameScreen.classList.contains('hidden')) return;
-  // Если открыто меню здания или газета — E закрывает их
-  if (!document.getElementById('bmenu').classList.contains('hidden')) { closeBuildingMenu(); return; }
+  if (!bmenu.classList.contains('hidden')) { closeBuildingMenu(); return; }
   if (!paper.classList.contains('hidden')) { closePaper(); return; }
   if (nearPaper()) {
     if (!hasPaper) {
       hasPaper = true;
+      if (sceneRef) { sceneRef.worldG.clear(); paintWorld(sceneRef.worldG); }
       showMsg('Взял газету! Теперь клавиша N — вакансии в любом месте.');
       save();
     } else openPaper();
@@ -460,18 +419,22 @@ function interact() {
   else if (nearHostel()) rentRoom();
 }
 
-function buyFood() {
-  if (state.money >= FOOD_PRICE) {
-    state.money -= FOOD_PRICE;
-    state.hunger = 100;
-    state.health = Math.min(100, state.health + 5); // за приём пищи +5% здоровья
-    showMsg('Купил еду за ' + FOOD_PRICE + ' BYN. Голод восполнен, +5% здоровья. Осталось: ' + state.money + ' BYN.');
-    updateHud();
-    save();
-  } else {
-    showMsg('Не хватает денег на еду (' + FOOD_PRICE + ' BYN). Нужно заработать.');
-  }
-}
+addEventListener('keydown', e => {
+  if (e.code === 'KeyE') interact();
+  if (e.code === 'KeyN') togglePaperAnywhere();
+});
+
+document.querySelectorAll('#touch button').forEach(b => {
+  const k = b.dataset.k, act = b.dataset.act;
+  const on = e => { e.preventDefault(); if (k) touchKeys[k] = true; if (act === 'e') interact(); if (act === 'n') togglePaperAnywhere(); };
+  const off = e => { e.preventDefault(); if (k) touchKeys[k] = false; };
+  b.addEventListener('touchstart', on);
+  b.addEventListener('touchend', off);
+  b.addEventListener('touchcancel', off);
+  b.addEventListener('mousedown', on);
+  b.addEventListener('mouseup', off);
+  b.addEventListener('mouseleave', off);
+});
 
 function openPaper() {
   paper.classList.remove('hidden');
@@ -491,7 +454,6 @@ function pickPOI(typeArr, usedPOI) {
   const pool = POIS.filter(p => typeArr.includes(p.type) && !usedPOI.includes(p));
   return pool[Math.floor(Math.random() * pool.length)];
 }
-
 function startMission(job) {
   if (mission) { showMsg('Сначала закончи текущую работу!'); return; }
   const n = job.n || 2;
@@ -501,7 +463,6 @@ function startMission(job) {
   pts.push({ x: p.x + p.w / 2, y: p.y + p.h / 2 });
   for (let i = 1; i < n; i++) {
     let q = pickPOI(job.to, used);
-    // точки не должны совпадать (напр. две одинаковые остановки)
     let guard = 0;
     while (used.includes(q) && guard++ < 20) q = pickPOI(job.to, used);
     used.push(q);
@@ -509,26 +470,19 @@ function startMission(job) {
   }
   mission = { jobId: job.id, pay: job.pay, points: pts, idx: 0 };
   showMsg(job.title + ': иди к первой точке (зелёная, на миникарте). Всего точек: ' + n + '. +' + job.pay + ' BYN.');
-  updateMissionBar();
-  save();
+  updateMissionBar(); save();
 }
-
 function finishMission() {
   if (!mission) return;
   state.money += mission.pay;
   showMsg('Готово! +' + mission.pay + ' BYN. Всего: ' + state.money + ' BYN.');
   mission = null;
-  updateMissionBar();
-  updateHud();
-  save();
+  updateMissionBar(); updateHud(); save();
 }
-
 function jobTitle(id) { const j = JOBS.find(j => j.id === id); return j ? j.title : id; }
-
 function updateMissionBar() {
   if (!mission) { missionBar.textContent = ''; return; }
-  if (mission.points)
-    missionBar.textContent = 'Миссия «' + jobTitle(mission.jobId) + '»: точка ' + (mission.idx + 1) + ' из ' + mission.points.length + ' (+' + mission.pay + ' BYN)';
+  missionBar.textContent = 'Миссия «' + jobTitle(mission.jobId) + '»: точка ' + (mission.idx + 1) + ' из ' + mission.points.length + ' (+' + mission.pay + ' BYN)';
 }
 
 // --- Сохранение ---
@@ -547,11 +501,17 @@ function startGame(name) {
   gameScreen.classList.remove('hidden');
   document.getElementById('st-name').textContent = heroName;
   updateHud();
-  resizeCanvas();
+  if (!game) game = new Phaser.Game({
+    type: Phaser.AUTO,
+    parent: 'game-container',
+    backgroundColor: '#2b2b33',
+    scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' },
+    physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
+    scene: [GameScene]
+  });
   showMsg(heroName + ' на автовокзале. В кармане 10 BYN, голод ' + Math.round(state.hunger) + '%. E — киоск/газета. Газету подбери, потом N — везде.');
   save();
   setInterval(tick, 1000);
-  requestAnimationFrame(loop);
 }
 function continueGame(sv) {
   Object.assign(state, sv.state);
@@ -572,8 +532,8 @@ document.getElementById('go-restart').addEventListener('click', () => { localSto
 document.getElementById('day-next').addEventListener('click', nextDay);
 document.getElementById('day-restart').addEventListener('click', () => { localStorage.removeItem(SAVE_KEY); location.reload(); });
 
-const sv = loadSave();
-if (sv && sv.name) {
+const sv0 = loadSave();
+if (sv0 && sv0.name) {
   continueRow.classList.remove('hidden');
   newRow.classList.add('hidden');
 }
@@ -592,20 +552,14 @@ const MIN_PER_TICK = 10 / 60; // 10 игровых секунд = 1 секунд
 function tick() {
   if (dead) return;
   state.minutes = Math.min(state.endMinutes, state.minutes + MIN_PER_TICK);
-  // Голод: 100% уходит за 25 игровых часов
-  state.hunger -= (MIN_PER_TICK * 100) / (25 * 60);
-  // Сон: 100% уходит за 20 часов бодрствования (дальше — здоровье падает)
-  state.sleep -= (MIN_PER_TICK * 100) / (20 * 60);
-  // Туалет: 100% за 30 часов (дальше — здоровье падает)
-  state.toilet = Math.min(100, state.toilet + (MIN_PER_TICK * 100) / (30 * 60));
+  state.hunger -= (MIN_PER_TICK * 100) / (25 * 60);          // 100% за 25 игр. часов
+  state.sleep -= (MIN_PER_TICK * 100) / (20 * 60);            // 100% за 20 часов бодрствования
+  state.toilet = Math.min(100, state.toilet + (MIN_PER_TICK * 100) / (30 * 60)); // 100% за 30 часов
   if (state.hunger <= 0) state.health = Math.max(0, state.health - MIN_PER_TICK * 0.4);
-  if (state.sleep <= 0) state.health = Math.max(0, state.health - MIN_PER_TICK / 60); // 1% за игровой час без сна
-  if (state.toilet >= 100) state.health = Math.max(0, state.health - MIN_PER_TICK / 60); // 1% за игровой час
-  // Смерть от голода при -5%
+  if (state.sleep <= 0) state.health = Math.max(0, state.health - MIN_PER_TICK / 60);
+  if (state.toilet >= 100) state.health = Math.max(0, state.health - MIN_PER_TICK / 60);
   if (state.hunger <= -5) { updateHud(); gameOver('Пустой желудок', heroName + ' умер от голода. Начни день заново.'); return; }
-  // Смерть при нулевом здоровье (сон/туалет)
   if (state.health <= 0) { updateHud(); gameOver('Организм не выдержал', heroName + ': здоровье на нуле. Игра окончена.'); return; }
-  // Конец дня — наступил вечер 22:00
   if (state.minutes >= state.endMinutes) { dayOver(); return; }
   updateHud();
   save();
@@ -618,11 +572,11 @@ function dayOver() {
   document.getElementById('day-text').textContent = heroName + ', вечер 22:00. В кармане: ' + state.money + ' BYN.';
   document.getElementById('dayover').classList.remove('hidden');
 }
-
 function nextDay() {
   day++;
   state.minutes = 8 * 60;
   player.x = 8000; player.y = 9000;
+  if (sceneRef && sceneRef.hero) sceneRef.hero.setPosition(player.x + player.s / 2, player.y + player.s / 2);
   mission = null;
   dead = false;
   document.getElementById('dayover').classList.add('hidden');
@@ -649,222 +603,229 @@ function updateHud() {
   sEl.style.color = state.sleep <= 0 ? '#ff5555' : '';
 }
 
-// --- Рисовка мира ---
-function drawWorld() {
-  x.fillStyle = '#3a3a44';
-  x.fillRect(0, 0, WORLD.w, WORLD.h);
+// --- Отрисовка мира (в Phaser Graphics, мировые координаты) ---
+function paintDoor(g, p) {
+  const s = doorSide(p);
+  const cx = p.x + p.w / 2, cy = p.y + p.h / 2;
+  g.fillStyle(0x1b1b1f, 1);
+  if (s === 's') g.fillRect(cx - DOOR_W / 2, p.y + p.h - DOOR_H, DOOR_W, DOOR_H);
+  else if (s === 'n') g.fillRect(cx - DOOR_W / 2, p.y, DOOR_W, DOOR_H);
+  else if (s === 'w') g.fillRect(p.x, cy - DOOR_W / 2, DOOR_H, DOOR_W);
+  else g.fillRect(p.x + p.w - DOOR_H, cy - DOOR_W / 2, DOOR_H, DOOR_W);
+}
+function paintWorld(g) {
+  g.fillStyle(0x3a3a44, 1);
+  g.fillRect(0, 0, WORLD.w, WORLD.h);
   // Дороги сеткой
-  x.fillStyle = '#2e2e36';
-  ROADS_H.forEach(y => x.fillRect(0, y, WORLD.w, ROAD_W));
-  ROADS_V.forEach(xx => x.fillRect(xx, 0, ROAD_W, WORLD.h));
-  x.strokeStyle = 'rgba(255,210,74,.5)';
-  x.setLineDash([200, 200]);
-  ROADS_H.forEach(y => { x.beginPath(); x.moveTo(0, y + ROAD_W / 2); x.lineTo(WORLD.w, y + ROAD_W / 2); x.stroke(); });
-  ROADS_V.forEach(xx => { x.beginPath(); x.moveTo(xx + ROAD_W / 2, 0); x.lineTo(xx + ROAD_W / 2, WORLD.h); x.stroke(); });
-  x.setLineDash([]);
-  // POI-здания (+ дверь снизу у зданий, куда можно войти)
+  g.fillStyle(0x2e2e36, 1);
+  ROADS_H.forEach(y => g.fillRect(0, y, WORLD.w, ROAD_W));
+  ROADS_V.forEach(xx => g.fillRect(xx, 0, ROAD_W, WORLD.h));
+  g.lineStyle(8, 0xffd24a, 0.5);
+  g.setLineDash([200, 200]);
+  ROADS_H.forEach(y => g.lineBetween(0, y + ROAD_W / 2, WORLD.w, y + ROAD_W / 2));
+  ROADS_V.forEach(xx => g.lineBetween(xx + ROAD_W / 2, 0, xx + ROAD_W / 2, WORLD.h));
+  g.setLineDash([]);
+  g.lineStyle(1, 0x000000, 1);
+  // POI-здания + двери + подписи
   POIS.forEach(p => {
     if (p.draw === false) return;
-    x.fillStyle = p.color;
-    x.fillRect(p.x, p.y, p.w, p.h);
-    if (!PASSABLE.includes(p.type)) drawDoor(p);
-    x.fillStyle = 'rgba(255,255,255,.75)';
-    x.font = '28px sans-serif';
-    x.fillText(p.label, p.x + 20, p.y + p.h / 2 + 10);
+    g.fillStyle(p.color, 1);
+    g.fillRect(p.x, p.y, p.w, p.h);
+    if (!PASSABLE.includes(p.type)) paintDoor(g, p);
+    const t = g.scene.add.text(p.x + 20, p.y + p.h / 2, p.label, { fontSize: '28px', fill: 'rgba(255,255,255,.75)' }).setOrigin(0, 0.5);
+    t.setDepth(-1); // под героями, но в мире
   });
   // Площадка вокзала
-  x.fillStyle = '#4a4a55';
-  x.fillRect(STATION.x, STATION.y, STATION.w, STATION.h);
+  g.fillStyle(0x4a4a55, 1);
+  g.fillRect(STATION.x, STATION.y, STATION.w, STATION.h);
   // Кресла
-  x.fillStyle = '#5a4632';
+  g.fillStyle(0x5a4632, 1);
   for (let r = 0; r < 3; r++)
     for (let i = 0; i < 6; i++)
-      x.fillRect(STATION.x + 600 + i * 550, STATION.y + 600 + r * 450, 420, 280);
+      g.fillRect(STATION.x + 600 + i * 550, STATION.y + 600 + r * 450, 420, 280);
   // Кассы
-  x.fillStyle = '#6b4f2a';
-  x.fillRect(STATION.x + 1400, STATION.y + 200, 1200, 300);
-  x.fillStyle = '#eee';
-  x.font = '40px sans-serif';
-  x.fillText('КАССЫ', STATION.x + 1480, STATION.y + 410);
-  // Газета (исчезает с карты после подбора)
+  g.fillStyle(0x6b4f2a, 1);
+  g.fillRect(STATION.x + 1400, STATION.y + 200, 1200, 300);
+  // Газета (исчезает после подбора)
   if (!hasPaper) {
-    x.fillStyle = '#e8e0c8';
-    x.fillRect(6200, 9900, 460, 320);
-    x.fillStyle = '#333';
-    x.font = '30px sans-serif';
-    x.fillText('ГАЗЕТА', 6240, 10110);
-    if (nearPaper() && paper.classList.contains('hidden')) {
-      x.fillStyle = '#ffd24a';
-      x.font = '34px sans-serif';
-      x.fillText('E — взять газету', 6000, 9800);
-    }
+    g.fillStyle(0xe8e0c8, 1);
+    g.fillRect(6200, 9900, 460, 320);
   }
-  // Подсказки у туалетов
-  TOILETS.forEach(t => {
-    if (near({ x: t.x + t.w / 2, y: t.y + t.h / 2, r: 450 }) && paper.classList.contains('hidden')) {
-      x.fillStyle = state.toilet >= 100 ? '#ff5555' : '#7fdb8a';
-      x.font = '34px sans-serif';
-      x.fillText('E — туалет', t.x - 100, t.y - 40);
-    }
+  // Киоск
+  g.fillStyle(0x7a3b2e, 1);
+  g.fillRect(KIOSK.x, KIOSK.y, KIOSK.w, KIOSK.h);
+  g.fillStyle(0xe8e0c8, 1);
+  g.fillRect(KIOSK.x + 80, KIOSK.y + 80, 640, 200);
+  // WC на вокзале
+  g.fillStyle(0xcfd6dd, 1);
+  g.fillRect(TOILET.x, TOILET.y, TOILET.w, TOILET.h);
+  paintDoor(g, TOILET);
+  // Общежитие
+  g.fillStyle(0x2e5a8a, 1);
+  g.fillRect(HOSTEL.x, HOSTEL.y, HOSTEL.w, HOSTEL.h);
+  paintDoor(g, HOSTEL);
+  // Подписи крупных объектов
+  const labels = [
+    ['КАССЫ', STATION.x + 1480, STATION.y + 350, 40, '#eee'],
+    ['ГАЗЕТА', 6240, 10040, 30, '#333'],
+    ['КИОСК', KIOSK.x + 180, KIOSK.y + 180, 30, '#333'],
+    ['WC', TOILET.x + 100, TOILET.y + 140, 30, '#333'],
+    ['ОБЩЕЖИТИЕ', HOSTEL.x + 60, HOSTEL.y + 360, 30, '#eee'],
+    ['АВТОВОКЗАЛ', 7200, 6860, 60, '#888']
+  ];
+  labels.forEach(([txt, lx, ly, fs, col]) => {
+    if (txt === 'ГАЗЕТА' && hasPaper) return;
+    const t = g.scene.add.text(lx, ly, txt, { fontSize: fs + 'px', fill: col });
+    t.setDepth(-1);
   });
-  // Текущая точка миссии: последняя — жёлтая (доставка), остальные — зелёные (взять)
-  if (mission && mission.points && mission.points[mission.idx]) {
-    const t = mission.points[mission.idx];
-    const isLast = mission.idx === mission.points.length - 1;
-    x.fillStyle = isLast ? '#ffd24a' : '#7fdb8a';
-    x.beginPath(); x.arc(t.x, t.y, 40, 0, Math.PI * 2); x.fill();
-    x.fillStyle = '#333';
-    x.font = 'bold 36px sans-serif';
-    x.fillText(String(mission.idx + 1), t.x - 12, t.y + 12);
-  }
-  // Киоск с едой
-  x.fillStyle = '#7a3b2e';
-  x.fillRect(KIOSK.x, KIOSK.y, KIOSK.w, KIOSK.h);
-  x.fillStyle = '#e8e0c8';
-  x.fillRect(KIOSK.x + 80, KIOSK.y + 80, 640, 200);
-  x.fillStyle = '#333';
-  x.font = '30px sans-serif';
-  x.fillText('КИОСК', KIOSK.x + 180, KIOSK.y + 220);
-  if (nearKiosk() && paper.classList.contains('hidden')) {
-    x.fillStyle = '#7fdb8a';
-    x.font = '34px sans-serif';
-    x.fillText('E — еда за ' + FOOD_PRICE + ' BYN', 4600, 8400);
-  }
-  // Туалет на вокзале
-  x.fillStyle = '#cfd6dd';
-  x.fillRect(TOILET.x, TOILET.y, TOILET.w, TOILET.h);
-  x.fillStyle = '#333';
-  x.font = '30px sans-serif';
-  x.fillText('WC', TOILET.x + 100, TOILET.y + 160);
-  drawDoor(TOILET);
-  // Общежитие (жильё на ночь)
-  x.fillStyle = '#2e5a8a';
-  x.fillRect(HOSTEL.x, HOSTEL.y, HOSTEL.w, HOSTEL.h);
-  x.fillStyle = '#eee';
-  x.font = '30px sans-serif';
-  x.fillText('ОБЩЕЖИТИЕ', HOSTEL.x + 60, HOSTEL.y + 380);
-  drawDoor(HOSTEL);
-  if (nearHostel() && paper.classList.contains('hidden')) {
-    x.fillStyle = '#7fdb8a';
-    x.font = '34px sans-serif';
-    x.fillText('E — комната за ' + ROOM_PRICE + ' BYN (сон 100%)', 4200, 10400);
-  }
-  // Подпись вокзала
-  x.fillStyle = '#888';
-  x.font = '60px sans-serif';
-  x.fillText('АВТОВОКЗАЛ', 7200, 6900);
 }
 
-// --- Миникарта ---
-function drawMinimap() {
-  const sx = mm.width / WORLD.w, sy = mm.height / WORLD.h;
-  mx.clearRect(0, 0, mm.width, mm.height);
-  mx.fillStyle = 'rgba(20,20,26,.9)';
-  mx.fillRect(0, 0, mm.width, mm.height);
-  // Дороги сеткой (светлые, чтобы читались)
-  mx.fillStyle = '#50505c';
-  ROADS_H.forEach(y => mx.fillRect(0, y * sy, mm.width, ROAD_W * sy));
-  ROADS_V.forEach(xx => mx.fillRect(xx * sx, 0, ROAD_W * sx, mm.height));
-  // POI
-  POIS.forEach(p => {
-    mx.fillStyle = p.color;
-    mx.fillRect(p.x * sx, p.y * sy, Math.max(2, p.w * sx), Math.max(2, p.h * sy));
-  });
-  // Киоск и общежитие
-  mx.fillStyle = '#7a3b2e';
-  mx.fillRect(KIOSK.x * sx, KIOSK.y * sy, KIOSK.w * sx, KIOSK.h * sy);
-  mx.fillStyle = '#2e5a8a';
-  mx.fillRect(HOSTEL.x * sx, HOSTEL.y * sy, HOSTEL.w * sx, HOSTEL.h * sy);
-  // Газета на вокзале (пока не подобрана)
-  if (!hasPaper) {
-    mx.fillStyle = '#e8e0c8';
-    mx.beginPath(); mx.arc(PAPER_SPOT.x * sx, PAPER_SPOT.y * sy, 4, 0, Math.PI * 2); mx.fill();
+// --- Сцена Phaser ---
+class GameScene extends Phaser.Scene {
+  constructor() { super('play'); }
+  create() {
+    sceneRef = this;
+    // Текстура героя 48x48
+    const g = this.make.graphics({ add: false });
+    g.fillStyle(0x4aa8ff, 1);
+    g.fillRect(0, 0, 48, 48);
+    g.generateTexture('hero', 48, 48);
+    g.destroy();
+
+    // Мир
+    this.worldG = this.add.graphics();
+    paintWorld(this.worldG);
+
+    // Стены (статичные тела по вырезанным дверям)
+    this.walls = this.physics.add.staticGroup();
+    solids().forEach(r => {
+      this.walls.add(this.add.rectangle(r.x + r.w / 2, r.y + r.h / 2, Math.max(1, r.w), Math.max(1, r.h), 0x000000, 0));
+    });
+
+    // Герой
+    const sv = loadSave();
+    if (sv && sv.player) { player.x = sv.player.x; player.y = sv.player.y; }
+    this.hero = this.physics.add.sprite(player.x + player.s / 2, player.y + player.s / 2, 'hero');
+    this.hero.setCollideWorldBounds(true);
+    this.physics.add.collider(this.hero, this.walls);
+
+    // Имя над героем (только основная камера)
+    this.nameText = this.add.text(0, 0, heroName, { fontSize: '28px', fill: '#fff' }).setOrigin(0.5, 1);
+
+    // Точка миссии (основная, только главная камера)
+    this.missionDot = this.add.circle(-9999, -9999, 40, 0x7fdb8a);
+    this.missionNum = this.add.text(-9999, -9999, '', { fontSize: 'bold 36px', fill: '#333' }).setOrigin(0.5);
+
+    // Объекты только для миникарты
+    this.miniPlayer = this.add.rectangle(0, 0, 260, 260, 0xffffff);
+    this.miniDots = [0, 1, 2].map(() => this.add.circle(-9999, -9999, 150, 0xffffff));
+    this.miniArrowG = this.add.graphics();
+    this.miniEda = this.add.text(0, 0, 'ЕДА!', { fontSize: '700px', fill: '#ff5555' }).setOrigin(0, 1);
+    this.vpRect = this.add.rectangle(0, 0, 10, 10).setStrokeStyle(2, 0xffffff).setFillStyle(0x000000, 0);
+
+    // Камеры
+    const main = this.cameras.main;
+    main.setBounds(0, 0, WORLD.w, WORLD.h);
+    main.startFollow(this.hero, true, 0.08, 0.08);
+    this.mm = this.cameras.add(0, 0, 240, 180);
+    this.mm.setBounds(0, 0, WORLD.w, WORLD.h);
+    this.mm.setBackgroundColor(0x14141a, 0.92);
+    this.mm.startFollow(this.hero, true, 1, 1);
+    main.ignore([this.miniPlayer, this.miniArrowG, this.miniEda, this.vpRect, ...this.miniDots]);
+    this.mm.ignore([this.hero, this.nameText, this.missionDot, this.missionNum]);
+    const size = this.scale.gameSize;
+    this.layoutMinimap(size.width, size.height);
+    this.scale.on('resize', s => this.layoutMinimap(s.width, s.height));
+
+    // Клавиатура
+    this.cursor = this.input.keyboard.createCursorKeys();
+    this.wasd = this.input.keyboard.addKeys('W,A,S,D');
   }
-  // Точки миссий: текущая — яркая, остальные — бледные
-  if (mission && mission.points) mission.points.forEach((t, i) => {
-    const isCur = i === mission.idx;
-    const isLast = i === mission.points.length - 1;
-    mx.fillStyle = isCur ? (isLast ? '#ffd24a' : '#7fdb8a') : 'rgba(255,255,255,.25)';
-    mx.beginPath(); mx.arc(t.x * sx, t.y * sy, isCur ? 5 : 3, 0, Math.PI * 2); mx.fill();
-  });
-  // Игрок
-  mx.fillStyle = '#fff';
-  mx.beginPath(); mx.arc(player.x * sx, player.y * sy, 4, 0, Math.PI * 2); mx.fill();
-  // Область видимости камеры
-  mx.strokeStyle = 'rgba(255,255,255,.5)';
-  mx.strokeRect(cam.x * sx, cam.y * sy, c.width * sx, c.height * sy);
-  // Голод ниже 10% — стрелка к ближайшему киоску
-  if (state.hunger < 10) {
-    const px = player.x * sx, py = player.y * sy;
-    const kx = KIOSK_SPOT.x * sx, ky = KIOSK_SPOT.y * sy;
-    const ang = Math.atan2(ky - py, kx - px);
-    mx.strokeStyle = '#ff5555';
-    mx.lineWidth = 2;
-    mx.beginPath(); mx.moveTo(px, py); mx.lineTo(kx, ky); mx.stroke();
-    mx.fillStyle = '#ff5555';
-    mx.beginPath();
-    mx.moveTo(kx, ky);
-    mx.lineTo(kx - 12 * Math.cos(ang - 0.5), ky - 12 * Math.sin(ang - 0.5));
-    mx.lineTo(kx - 12 * Math.cos(ang + 0.5), ky - 12 * Math.sin(ang + 0.5));
-    mx.closePath(); mx.fill();
-    mx.lineWidth = 1;
-    if (Math.floor(Date.now() / 500) % 2 === 0) {
-      mx.font = '10px sans-serif';
-      mx.fillText('ЕДА!', kx + 8, ky - 8);
+  layoutMinimap(w, h) {
+    const mobile = w < 700;
+    this.mmW = mobile ? 140 : 240;
+    this.mmH = mobile ? 105 : 180;
+    this.mm.setSize(this.mmW, this.mmH);
+    this.mm.setPosition(w - this.mmW - 12, h - this.mmH - 12);
+    this.mm.setZoom(this.mmW / WORLD.w);
+  }
+  update() {
+    if (!this.hero) return;
+    player.x = this.hero.x - player.s / 2;
+    player.y = this.hero.y - player.s / 2;
+
+    const uiOpen = !paper.classList.contains('hidden') || !bmenu.classList.contains('hidden') ||
+      !document.getElementById('gameover').classList.contains('hidden') ||
+      !document.getElementById('dayover').classList.contains('hidden');
+    if (dead || uiOpen) { this.hero.setVelocity(0, 0); return; }
+
+    let vx = 0, vy = 0;
+    if (this.cursor.left.isDown || this.wasd.A.isDown || touchKeys['arrowleft'] || touchKeys['a']) vx -= 1;
+    if (this.cursor.right.isDown || this.wasd.D.isDown || touchKeys['arrowright'] || touchKeys['d']) vx += 1;
+    if (this.cursor.up.isDown || this.wasd.W.isDown || touchKeys['arrowup'] || touchKeys['w']) vy -= 1;
+    if (this.cursor.down.isDown || this.wasd.S.isDown || touchKeys['arrowdown'] || touchKeys['s']) vy += 1;
+    if (vx && vy) { vx *= Math.SQRT1_2; vy *= Math.SQRT1_2; }
+    this.hero.setVelocity(vx * player.speed, vy * player.speed);
+
+    this.nameText.setPosition(this.hero.x, this.hero.y - player.s / 2 - 8).setText(heroName);
+
+    // Меню внутри здания
+    const b = buildingAt();
+    if (b !== currentBuilding) {
+      currentBuilding = b;
+      if (b) openBuildingMenu(b); else closeBuildingMenu();
     }
-  }
-}
 
-function loop() {
-  if (dead || !paper.classList.contains('hidden')) { requestAnimationFrame(loop); return; }
-  let dx = 0, dy = 0;
-  if (keys['arrowleft'] || keys['a']) dx -= player.speed;
-  if (keys['arrowright'] || keys['d']) dx += player.speed;
-  if (keys['arrowup'] || keys['w']) dy -= player.speed;
-  if (keys['arrowdown'] || keys['s']) dy += player.speed;
-  // Движение по осям с проверкой коллизий — можно скользить вдоль стен
-  if (dx && !collides(player.x + dx, player.y)) player.x += dx;
-  if (dy && !collides(player.x, player.y + dy)) player.y += dy;
-  player.x = Math.max(0, Math.min(WORLD.w - player.s, player.x));
-  player.y = Math.max(0, Math.min(WORLD.h - player.s, player.y));
-
-  // Зашли в здание — показать меню; вышли — скрыть
-  const b = buildingAt();
-  if (b !== currentBuilding) {
-    currentBuilding = b;
-    if (b) openBuildingMenu(b); else closeBuildingMenu();
-  }
-
-  // Камера следует за игроком
-  cam.x = Math.max(0, Math.min(WORLD.w - c.width, player.x + player.s / 2 - c.width / 2));
-  cam.y = Math.max(0, Math.min(WORLD.h - c.height, player.y + player.s / 2 - c.height / 2));
-
-  x.save();
-  x.clearRect(0, 0, c.width, c.height);
-  x.translate(-cam.x, -cam.y);
-  drawWorld();
-  x.fillStyle = '#4aa8ff';
-  x.fillRect(player.x, player.y, player.s, player.s);
-  x.fillStyle = '#fff';
-  x.font = '28px sans-serif';
-  x.fillText(heroName, player.x - 16, player.y - 12);
-  x.restore();
-
-  drawMinimap();
-
-  // Дошёл до текущей точки миссии?
-  if (mission && mission.points && mission.points[mission.idx]) {
-    const t = mission.points[mission.idx];
-    const dx = player.x + player.s / 2 - t.x, dy = player.y + player.s / 2 - t.y;
-    if (Math.hypot(dx, dy) < 60) {
-      mission.idx++;
-      if (mission.idx >= mission.points.length) finishMission();
-      else { showMsg('Взял! Теперь неси к следующей точке (' + (mission.idx + 1) + '/' + mission.points.length + ').'); updateMissionBar(); save(); }
+    // Точки миссии
+    if (mission && mission.points && mission.points[mission.idx]) {
+      const t = mission.points[mission.idx];
+      const isLast = mission.idx === mission.points.length - 1;
+      const col = isLast ? 0xffd24a : 0x7fdb8a;
+      this.missionDot.setPosition(t.x, t.y).setFillStyle(col).setVisible(true);
+      this.missionNum.setPosition(t.x, t.y).setText(String(mission.idx + 1)).setVisible(true);
+      mission.points.forEach((p, i) => {
+        const d = this.miniDots[i];
+        if (!d) return;
+        const cur = i === mission.idx, lst = i === mission.points.length - 1;
+        d.setVisible(true).setPosition(p.x, p.y)
+          .setFillStyle(cur ? (lst ? 0xffd24a : 0x7fdb8a) : 0xffffff)
+          .setAlpha(cur ? 1 : 0.25);
+      });
+      // Дошёл до точки?
+      if (Math.hypot(this.hero.x - t.x, this.hero.y - t.y) < 60) {
+        mission.idx++;
+        if (mission.idx >= mission.points.length) finishMission();
+        else { showMsg('Взял! Теперь неси к следующей точке (' + (mission.idx + 1) + '/' + mission.points.length + ').'); updateMissionBar(); save(); }
+      }
+    } else {
+      this.missionDot.setVisible(false);
+      this.missionNum.setVisible(false);
+      this.miniDots.forEach(d => d.setVisible(false));
     }
-  }
 
-  if (Math.random() < 0.02) save();
-  requestAnimationFrame(loop);
+    // Миникарта: игрок, рамка вьюпорта, стрелка к киоску при голоде < 10%
+    this.miniPlayer.setPosition(this.hero.x, this.hero.y);
+    const z = this.mm.zoom;
+    const vw = this.mmW / z, vh = this.mmH / z;
+    this.vpRect.setPosition(this.mm.scrollX + vw / 2, this.mm.scrollY + vh / 2).setSize(vw, vh);
+    this.miniArrowG.clear();
+    if (state.hunger < 10) {
+      const kx = KIOSK_SPOT.x, ky = KIOSK_SPOT.y;
+      const ang = Math.atan2(ky - this.hero.y, kx - this.hero.x);
+      this.miniArrowG.lineStyle(120, 0xff5555, 1);
+      this.miniArrowG.lineBetween(this.hero.x, this.hero.y, kx, ky);
+      this.miniArrowG.fillStyle(0xff5555, 1);
+      this.miniArrowG.fillTriangle(
+        kx, ky,
+        kx - 900 * Math.cos(ang - 0.5), ky - 900 * Math.sin(ang - 0.5),
+        kx - 900 * Math.cos(ang + 0.5), ky - 900 * Math.sin(ang + 0.5)
+      );
+      if (Math.floor(Date.now() / 500) % 2 === 0) this.miniEda.setVisible(true).setPosition(kx + 300, ky - 300);
+      else this.miniEda.setVisible(false);
+    } else this.miniEda.setVisible(false);
+
+    if (Math.random() < 0.02) save();
+  }
 }
 </script>
 </body>
