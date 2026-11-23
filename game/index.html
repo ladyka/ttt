@@ -629,12 +629,10 @@ function paintWorld(g, labelObjs) {
   g.fillStyle(0x2e2e36, 1);
   ROADS_H.forEach(y => g.fillRect(0, y, WORLD.w, ROAD_W));
   ROADS_V.forEach(xx => g.fillRect(xx, 0, ROAD_W, WORLD.h));
-  g.lineStyle(8, 0xffd24a, 0.5);
-  g.setLineDash([200, 200]);
-  ROADS_H.forEach(y => g.lineBetween(0, y + ROAD_W / 2, WORLD.w, y + ROAD_W / 2));
-  ROADS_V.forEach(xx => g.lineBetween(xx + ROAD_W / 2, 0, xx + ROAD_W / 2, WORLD.h));
-  g.setLineDash([]);
-  g.lineStyle(1, 0x000000, 1);
+  // Пунктирная разметка отрезками (в Phaser 3.80 у Graphics нет setLineDash)
+  g.fillStyle(0xffd24a, 0.5);
+  ROADS_H.forEach(y => { for (let dx = 0; dx < WORLD.w; dx += 400) g.fillRect(dx, y + ROAD_W / 2 - 4, 200, 8); });
+  ROADS_V.forEach(xx => { for (let dy = 0; dy < WORLD.h; dy += 400) g.fillRect(xx + ROAD_W / 2 - 4, dy, 8, 200); });
   // POI-здания + двери + подписи
   POIS.forEach(p => {
     if (p.draw === false) return;
