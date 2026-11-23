@@ -271,6 +271,19 @@ function solids() {
   out.push(KIOSK); // в киоск входа нет — сплошной, еда снаружи по E
   return out;
 }
+function pointBlocked(x, y) {
+  return solids().some(b => x < b.x + b.w && x + player.s > b.x && y < b.y + b.h && y + player.s > b.y);
+}
+function nearestFree(x, y) {
+  if (!pointBlocked(x, y)) return { x, y };
+  for (let r = 80; r <= 4000; r += 80) {
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
+      const nx = x + r * Math.cos(a), ny = y + r * Math.sin(a);
+      if (nx >= 0 && ny >= 0 && nx <= WORLD.w - player.s && ny <= WORLD.h - player.s && !pointBlocked(nx, ny)) return { x: nx, y: ny };
+    }
+  }
+  return { x: 8000, y: 9000 }; // фолбэк — вокзал
+}
 
 const PAPER_SPOT = { x: 6430, y: 10060, r: 450 };
 const KIOSK_SPOT = { x: 5200, y: 8800, r: 500 };
@@ -714,7 +727,14 @@ class GameScene extends Phaser.Scene {
 
     // Герой
     const sv = loadSave();
+    if (location.hash.includes('debug')) console.log('CREATE sv=', JSON.stringify(sv && sv.player), 'player=', player.x, player.y);
     if (sv && sv.player) { player.x = sv.player.x; player.y = sv.player.y; }
+    // Если загруженная позиция внутри стены — выталкиваем в ближайшую свободную точку
+    if (pointBlocked(player.x, player.y)) {
+      const p = nearestFree(player.x, player.y);
+      player.x = p.x; player.y = p.y;
+      if (location.hash.includes('debug')) console.log('UNSTUCK ->', p.x, p.y);
+    }
     this.hero = this.physics.add.sprite(player.x + player.s / 2, player.y + player.s / 2, 'hero');
     this.hero.setCollideWorldBounds(true);
     this.physics.add.collider(this.hero, this.wallsList);
@@ -740,7 +760,8 @@ class GameScene extends Phaser.Scene {
     this.mm = this.cameras.add(0, 0, 240, 180);
     this.mm.setBounds(0, 0, WORLD.w, WORLD.h);
     this.mm.setBackgroundColor(0x14141a, 0.92);
-    this.mm.startFollow(this.hero, true, 1, 1);
+    // без startFollow: у зумнутой камеры он считает scroll без деления на зум —
+    // герой уезжал в угол миникарты. Scroll выставляем вручную в update.
     main.ignore([this.miniPlayer, this.miniArrowG, this.miniEda, this.vpRect, ...this.miniDots]);
     this.mm.ignore([this.hero, this.nameText, this.missionDot, this.missionNum]);
     const size = this.scale.gameSize;
@@ -760,6 +781,7 @@ class GameScene extends Phaser.Scene {
     this.mm.setZoom(this.mmW / WORLD.w);
   }
   update() {
+    if (location.hash.includes('debug') && !window.__updLogged) { window.__updLogged = 1; console.log('UPD called'); }
     if (!this.hero) return;
     player.x = this.hero.x - player.s / 2;
     player.y = this.hero.y - player.s / 2;
@@ -774,7 +796,9 @@ class GameScene extends Phaser.Scene {
     if (this.cursor.right.isDown || this.wasd.D.isDown || touchKeys['arrowright'] || touchKeys['d']) vx += 1;
     if (this.cursor.up.isDown || this.wasd.W.isDown || touchKeys['arrowup'] || touchKeys['w']) vy -= 1;
     if (this.cursor.down.isDown || this.wasd.S.isDown || touchKeys['arrowdown'] || touchKeys['s']) vy += 1;
+    if (location.hash.includes('debug') && window.__dbgRight) vx += 1; // автотест движения
     if (vx && vy) { vx *= Math.SQRT1_2; vy *= Math.SQRT1_2; }
+    if (location.hash.includes('debug') && vx && !window.__vxLogged) { window.__vxLogged = 1; console.log('VX', vx, 'dbgRight=', window.__dbgRight); }
     this.hero.setVelocity(vx * player.speed, vy * player.speed);
 
     this.nameText.setPosition(this.hero.x, this.hero.y - player.s / 2 - 8).setText(heroName);
@@ -813,10 +837,15 @@ class GameScene extends Phaser.Scene {
       this.miniDots.forEach(d => d.setVisible(false));
     }
 
-    // Миникарта: игрок, рамка вьюпорта, стрелка к киоску при голоде < 10%
-    this.miniPlayer.setPosition(this.hero.x, this.hero.y);
+    // Миникарта: ручной scroll, чтобы герой был ровно в центре
     const z = this.mm.zoom;
-    const vw = this.mmW / z, vh = this.mmH / z;
+    const mw = this.mmW / z, mh = this.mmH / z;
+    this.mm.setScroll(
+      Phaser.Math.Clamp(this.hero.x - mw / 2, 0, Math.max(0, WORLD.w - mw)),
+      Phaser.Math.Clamp(this.hero.y - mh / 2, 0, Math.max(0, WORLD.h - mh))
+    );
+    this.miniPlayer.setPosition(this.hero.x, this.hero.y);
+    const vw = mw, vh = mh;
     this.vpRect.setPosition(this.mm.scrollX + vw / 2, this.mm.scrollY + vh / 2).setSize(vw, vh);
     this.miniArrowG.clear();
     if (state.hunger < 10) {
@@ -839,7 +868,19 @@ class GameScene extends Phaser.Scene {
 }
 
 // Автостарт для отладки — после объявления класса GameScene
-if (location.hash === '#autostart') startBtn.click();
+if (location.hash.includes('autostart')) startBtn.click();
+if (location.hash.includes('debug')) setInterval(() => {
+  const s = sceneRef;
+  if (s && !window.__metaLogged) { window.__metaLogged = 1; console.log('META update=', typeof s.update, 'active=', s.sys.isActive(), 'status=', s.sys.settings.status); }
+  if (s && s.hero) console.log('DBG hero', Math.round(s.hero.x), Math.round(s.hero.y),
+    'vel', Math.round(s.hero.body.velocity.x), Math.round(s.hero.body.velocity.y),
+    'main scroll', Math.round(s.cameras.main.scrollX), Math.round(s.cameras.main.scrollY), 'zoom', s.cameras.main.zoom,
+    'mm', s.mm.x, s.mm.y, s.mm.width, s.mm.height, 'scroll', Math.round(s.mm.scrollX), Math.round(s.mm.scrollY), 'zoom', s.mm.zoom.toFixed(4));
+  // автотест движения: полсекунды вправо каждую секунду
+  if (window.__t === undefined) window.__t = 0;
+  window.__t++;
+  window.__dbgRight = (window.__t % 4) < 2;
+}, 500);
 </script>
 </body>
 </html>
