@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ТТТ: Тунеядзец тутэйшы торгаш</title>
-<script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+<script src="vendor/phaser.min.js"></script>
 <style>
   body { background: #1b1b1f; color: #eee; font-family: sans-serif; text-align: center; margin: 0; overflow: hidden; }
   #screen-game { position: fixed; inset: 0; }
@@ -143,6 +143,10 @@
 </div>
 
 <script>
+window.addEventListener('error', e => {
+  const t = document.getElementById('toasts');
+  if (t) showMsg('Ошибка: ' + (e.message || e.type));
+});
 const SAVE_KEY = 'ttt-save-v1';
 const nameScreen = document.getElementById('screen-name');
 const gameScreen = document.getElementById('screen-game');
@@ -409,7 +413,12 @@ function interact() {
   if (nearPaper()) {
     if (!hasPaper) {
       hasPaper = true;
-      if (sceneRef) { sceneRef.worldG.clear(); paintWorld(sceneRef.worldG); }
+      if (sceneRef) {
+        sceneRef.worldLabels.forEach(t => t.destroy());
+        sceneRef.worldLabels = [];
+        sceneRef.worldG.clear();
+        paintWorld(sceneRef.worldG, sceneRef.worldLabels);
+      }
       showMsg('Взял газету! Теперь клавиша N — вакансии в любом месте.');
       save();
     } else openPaper();
@@ -501,11 +510,12 @@ function startGame(name) {
   gameScreen.classList.remove('hidden');
   document.getElementById('st-name').textContent = heroName;
   updateHud();
+  if (typeof Phaser === 'undefined') { showMsg('Phaser не загрузился (vendor/phaser.min.js).'); return; }
   if (!game) game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: 'game-container',
     backgroundColor: '#2b2b33',
-    scale: { mode: Phaser.Scale.RESIZE, width: '100%', height: '100%' },
+    scale: { mode: Phaser.Scale.RESIZE, width: window.innerWidth, height: window.innerHeight },
     physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
     scene: [GameScene]
   });
@@ -537,6 +547,7 @@ if (sv0 && sv0.name) {
   continueRow.classList.remove('hidden');
   newRow.classList.add('hidden');
 }
+if (location.hash === '#autostart') startBtn.click();
 
 function gameOver(title, text) {
   if (dead) return;
@@ -613,7 +624,7 @@ function paintDoor(g, p) {
   else if (s === 'w') g.fillRect(p.x, cy - DOOR_W / 2, DOOR_H, DOOR_W);
   else g.fillRect(p.x + p.w - DOOR_H, cy - DOOR_W / 2, DOOR_H, DOOR_W);
 }
-function paintWorld(g) {
+function paintWorld(g, labelObjs) {
   g.fillStyle(0x3a3a44, 1);
   g.fillRect(0, 0, WORLD.w, WORLD.h);
   // Дороги сеткой
@@ -633,7 +644,7 @@ function paintWorld(g) {
     g.fillRect(p.x, p.y, p.w, p.h);
     if (!PASSABLE.includes(p.type)) paintDoor(g, p);
     const t = g.scene.add.text(p.x + 20, p.y + p.h / 2, p.label, { fontSize: '28px', fill: 'rgba(255,255,255,.75)' }).setOrigin(0, 0.5);
-    t.setDepth(-1); // под героями, но в мире
+    if (labelObjs) labelObjs.push(t);
   });
   // Площадка вокзала
   g.fillStyle(0x4a4a55, 1);
@@ -665,7 +676,7 @@ function paintWorld(g) {
   g.fillRect(HOSTEL.x, HOSTEL.y, HOSTEL.w, HOSTEL.h);
   paintDoor(g, HOSTEL);
   // Подписи крупных объектов
-  const labels = [
+  const signs = [
     ['КАССЫ', STATION.x + 1480, STATION.y + 350, 40, '#eee'],
     ['ГАЗЕТА', 6240, 10040, 30, '#333'],
     ['КИОСК', KIOSK.x + 180, KIOSK.y + 180, 30, '#333'],
@@ -673,10 +684,10 @@ function paintWorld(g) {
     ['ОБЩЕЖИТИЕ', HOSTEL.x + 60, HOSTEL.y + 360, 30, '#eee'],
     ['АВТОВОКЗАЛ', 7200, 6860, 60, '#888']
   ];
-  labels.forEach(([txt, lx, ly, fs, col]) => {
+  signs.forEach(([txt, lx, ly, fs, col]) => {
     if (txt === 'ГАЗЕТА' && hasPaper) return;
     const t = g.scene.add.text(lx, ly, txt, { fontSize: fs + 'px', fill: col });
-    t.setDepth(-1);
+    if (labelObjs) labelObjs.push(t);
   });
 }
 
@@ -694,12 +705,15 @@ class GameScene extends Phaser.Scene {
 
     // Мир
     this.worldG = this.add.graphics();
-    paintWorld(this.worldG);
+    this.worldLabels = [];
+    paintWorld(this.worldG, this.worldLabels);
 
     // Стены (статичные тела по вырезанным дверям)
-    this.walls = this.physics.add.staticGroup();
+    this.wallsList = [];
     solids().forEach(r => {
-      this.walls.add(this.add.rectangle(r.x + r.w / 2, r.y + r.h / 2, Math.max(1, r.w), Math.max(1, r.h), 0x000000, 0));
+      const w = this.add.rectangle(r.x + r.w / 2, r.y + r.h / 2, Math.max(1, r.w), Math.max(1, r.h), 0x000000, 0);
+      this.physics.add.existing(w, true); // static body
+      this.wallsList.push(w);
     });
 
     // Герой
@@ -707,7 +721,7 @@ class GameScene extends Phaser.Scene {
     if (sv && sv.player) { player.x = sv.player.x; player.y = sv.player.y; }
     this.hero = this.physics.add.sprite(player.x + player.s / 2, player.y + player.s / 2, 'hero');
     this.hero.setCollideWorldBounds(true);
-    this.physics.add.collider(this.hero, this.walls);
+    this.physics.add.collider(this.hero, this.wallsList);
 
     // Имя над героем (только основная камера)
     this.nameText = this.add.text(0, 0, heroName, { fontSize: '28px', fill: '#fff' }).setOrigin(0.5, 1);
