@@ -444,7 +444,27 @@ function interact() {
 addEventListener('keydown', e => {
   if (e.code === 'KeyE') interact();
   if (e.code === 'KeyN') togglePaperAnywhere();
+  if (e.code === 'KeyL') dumpDebug();
 });
+
+// Полный дамп состояния для отладки — вызывается клавишей L или из #debug-интервала
+function dumpDebug() {
+  const s = sceneRef;
+  const hr = s && s.hero ? { x: Math.round(s.hero.x - player.s / 2), y: Math.round(s.hero.y - player.s / 2), w: player.s, h: player.s } : null;
+  const hits = hr ? solids().filter(b => hr.x < b.x + b.w && hr.x + hr.w > b.x && hr.y < b.y + b.h && hr.y + hr.h > b.y)
+    .map(b => [Math.round(b.x), Math.round(b.y), Math.round(b.w), Math.round(b.h)]) : [];
+  console.log('[DUMP] player=', Math.round(player.x), Math.round(player.y),
+    'hero=', s && s.hero ? [Math.round(s.hero.x), Math.round(s.hero.y)] : null,
+    'vel=', s && s.hero ? [Math.round(s.hero.body.velocity.x), Math.round(s.hero.body.velocity.y)] : null,
+    'blocked=', s && s.hero ? JSON.stringify(s.hero.body.blocked) : null,
+    'touching=', s && s.hero ? JSON.stringify(s.hero.body.touching) : null,
+    'overlapWalls=', JSON.stringify(hits),
+    'building=', currentBuilding ? currentBuilding.label : null,
+    'mainScroll=', s ? [Math.round(s.cameras.main.scrollX), Math.round(s.cameras.main.scrollY)] : null,
+    'gameSize=', s ? [s.scale.gameSize.width, s.scale.gameSize.height] : null,
+    'world=', [WORLD.w, WORLD.h],
+    'mission=', mission ? mission.jobId + ' idx=' + mission.idx : null);
+}
 
 document.querySelectorAll('#touch button').forEach(b => {
   const k = b.dataset.k, act = b.dataset.act;
@@ -529,7 +549,7 @@ function startGame(name) {
     parent: 'game-container',
     backgroundColor: '#2b2b33',
     scale: { mode: Phaser.Scale.RESIZE, width: window.innerWidth, height: window.innerHeight },
-    physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
+    physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: location.hash.includes('debug') } },
     scene: [GameScene]
   });
   showMsg(heroName + ' на автовокзале. В кармане 10 BYN, голод ' + Math.round(state.hunger) + '%. E — киоск/газета. Газету подбери, потом N — везде.');
@@ -727,13 +747,13 @@ class GameScene extends Phaser.Scene {
 
     // Герой
     const sv = loadSave();
-    if (location.hash.includes('debug')) console.log('CREATE sv=', JSON.stringify(sv && sv.player), 'player=', player.x, player.y);
+    console.log('CREATE sv=', JSON.stringify(sv && sv.player), 'player=', player.x, player.y);
     if (sv && sv.player) { player.x = sv.player.x; player.y = sv.player.y; }
     // Если загруженная позиция внутри стены — выталкиваем в ближайшую свободную точку
     if (pointBlocked(player.x, player.y)) {
       const p = nearestFree(player.x, player.y);
       player.x = p.x; player.y = p.y;
-      if (location.hash.includes('debug')) console.log('UNSTUCK ->', p.x, p.y);
+      console.warn('UNSTUCK ->', p.x, p.y);
     }
     this.hero = this.physics.add.sprite(player.x + player.s / 2, player.y + player.s / 2, 'hero');
     this.hero.setCollideWorldBounds(true);
@@ -800,6 +820,24 @@ class GameScene extends Phaser.Scene {
     if (vx && vy) { vx *= Math.SQRT1_2; vy *= Math.SQRT1_2; }
     if (location.hash.includes('debug') && vx && !window.__vxLogged) { window.__vxLogged = 1; console.log('VX', vx, 'dbgRight=', window.__dbgRight); }
     this.hero.setVelocity(vx * player.speed, vy * player.speed);
+
+    // --- Отладка застревания: если жмём клавиши, а герой не двигается — логируем в консоль ---
+    const now = this.time.now;
+    if (this._dbgT === undefined) { this._dbgT = now; this._dbgX = this.hero.x; this._dbgY = this.hero.y; }
+    if (now - this._dbgT >= 500) {
+      const moved = Math.hypot(this.hero.x - this._dbgX, this.hero.y - this._dbgY);
+      if ((vx || vy) && moved < 4) {
+        const hr = { x: this.hero.x - player.s / 2, y: this.hero.y - player.s / 2, w: player.s, h: player.s };
+        const hits = solids().filter(b => hr.x < b.x + b.w && hr.x + hr.w > b.x && hr.y < b.y + b.h && hr.y + hr.h > b.y)
+          .map(b => [Math.round(b.x), Math.round(b.y), Math.round(b.w), Math.round(b.h)]);
+        console.warn('[STUCK] hero=', Math.round(this.hero.x), Math.round(this.hero.y),
+          'vel=', Math.round(this.hero.body.velocity.x), Math.round(this.hero.body.velocity.y),
+          'blocked=', JSON.stringify(this.hero.body.blocked),
+          'touching=', JSON.stringify(this.hero.body.touching),
+          'overlapWalls=', JSON.stringify(hits));
+      }
+      this._dbgT = now; this._dbgX = this.hero.x; this._dbgY = this.hero.y;
+    }
 
     this.nameText.setPosition(this.hero.x, this.hero.y - player.s / 2 - 8).setText(heroName);
 
@@ -881,8 +919,10 @@ if (location.hash.includes('debug')) setInterval(() => {
   if (s && !window.__metaLogged) { window.__metaLogged = 1; console.log('META update=', typeof s.update, 'active=', s.sys.isActive(), 'status=', s.sys.settings.status); }
   if (s && s.hero) console.log('DBG hero', Math.round(s.hero.x), Math.round(s.hero.y),
     'vel', Math.round(s.hero.body.velocity.x), Math.round(s.hero.body.velocity.y),
+    'blocked', JSON.stringify(s.hero.body.blocked),
     'main scroll', Math.round(s.cameras.main.scrollX), Math.round(s.cameras.main.scrollY), 'zoom', s.cameras.main.zoom,
     'mm', s.mm.x, s.mm.y, s.mm.width, s.mm.height, 'scroll', Math.round(s.mm.scrollX), Math.round(s.mm.scrollY), 'zoom', s.mm.zoom.toFixed(4));
+  if (s && s.hero && (s.hero.body.blocked.left || s.hero.body.blocked.right || s.hero.body.blocked.up || s.hero.body.blocked.down)) dumpDebug();
   // автотест движения: полсекунды вправо каждую секунду
   if (window.__t === undefined) window.__t = 0;
   window.__t++;
