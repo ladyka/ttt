@@ -745,6 +745,9 @@ class GameScene extends Phaser.Scene {
       this.wallsList.push(w);
     });
 
+    // Границы физики — весь мир, а не размер экрана (иначе setCollideWorldBounds запирает героя в прямоугольнике канваса)
+    this.physics.world.setBounds(0, 0, WORLD.w, WORLD.h);
+
     // Герой
     const sv = loadSave();
     console.log('CREATE sv=', JSON.stringify(sv && sv.player), 'player=', player.x, player.y);
